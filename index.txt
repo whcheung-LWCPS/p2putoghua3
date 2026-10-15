@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>夏日天氣AI小助手</title>
+    <!-- Tailwind CSS for Responsive Design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti for Celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800&family=Mali:wght@600;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #F0F9FF;
+            touch-action: manipulation;
+        }
+
+        .font-pinyin {
+            font-family: 'Mali', cursive, sans-serif;
+        }
+
+        /* Drag and Drop Visual Feedback */
+        .drop-zone-active {
+            border-style: solid !important;
+            border-color: #3B82F6 !important;
+            background-color: #EFF6FF !important;
+            transform: scale(1.03);
+        }
+
+        .word-card-selected {
+            ring: 4px;
+            ring-color: #3B82F6;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="h-screen max-h-screen bg-gradient-to-b from-sky-100 via-blue-50 to-amber-50 text-slate-800 p-2 md:p-3 flex flex-col justify-between overflow-hidden select-none">
+
+    <!-- Top Header Bar -->
+    <header class="max-w-7xl mx-auto w-full shrink-0 mb-1.5">
+        <div class="bg-white/90 backdrop-blur rounded-xl p-2 shadow-sm border border-sky-200 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-amber-400 text-white rounded-lg flex items-center justify-center text-base shadow">
+                    <i class="fa-solid fa-sun"></i>
+                </div>
+                <h1 class="text-sm md:text-lg font-black text-slate-800 tracking-wide">夏日天氣AI小助手</h1>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="btn-sound-toggle" onclick="toggleAudio()" class="flex items-center gap-1.5 bg-sky-100 hover:bg-sky-200 text-sky-700 px-2 py-1 rounded-lg text-xs font-semibold transition">
+                    <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+                    <span id="sound-text" class="hidden sm:inline">普通話發音：開啟</span>
+                </button>
+                <button onclick="resetGame()" class="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow transition">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>換一局</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Container: Fits exactly inside viewport without scrolling -->
+    <main class="max-w-7xl mx-auto w-full flex-1 min-h-0 flex flex-col gap-2 justify-start">
+        
+        <!-- Instructional Prompt Banner -->
+        <div class="bg-blue-600 text-white p-1.5 md:p-2 rounded-xl shadow flex items-center justify-between gap-2 px-3 shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-circle-info text-yellow-300 text-base"></i>
+                <p class="text-xs font-bold">小提示：請觀察左上方圖片，把右上方詞語拖入下方空格，或先點詞語再點空格！</p>
+            </div>
+            <button onclick="speakText('請觀察圖片，然後把正確的詞語放到句子的空格內。')" class="bg-blue-500 hover:bg-blue-400 text-white p-1 rounded-md text-xs transition shrink-0" title="朗讀提示">
+                <i class="fa-solid fa-volume-high"></i>
+            </button>
+        </div>
+
+        <!-- TOP SECTION: Grid (Left: Image | Right: Word Bank) -->
+        <div class="grid grid-cols-12 gap-2 md:gap-2.5 shrink-0">
+            
+            <!-- TOP-LEFT COLUMN: Weather Image -->
+            <div class="col-span-5 sm:col-span-5 lg:col-span-4 bg-white rounded-2xl p-2 md:p-2.5 shadow-md border border-sky-100 flex flex-col justify-start gap-1">
+                <div class="text-xs font-bold text-slate-600 mb-0.5 flex items-center gap-1 shrink-0">
+                    <i class="fa-solid fa-image text-sky-500"></i> 天氣照片：
+                </div>
+                <div id="weather-image-container" class="w-full flex items-center justify-center bg-gradient-to-b from-sky-50 to-amber-50 rounded-xl p-1 border border-sky-100 relative overflow-hidden">
+                    <!-- Dynamic Weather Photo Injected via JS -->
+                </div>
+            </div>
+
+            <!-- TOP-RIGHT COLUMN: Word Bank -->
+            <div class="col-span-7 sm:col-span-7 lg:col-span-8 bg-white rounded-2xl p-2 md:p-2.5 shadow-md border border-sky-100 flex flex-col justify-start gap-1 md:gap-1.5 min-h-0">
+                
+                <div class="flex items-center justify-between border-b border-slate-100 pb-1 shrink-0">
+                    <div class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-boxes-packing text-amber-500 text-base"></i>
+                        <h2 class="text-xs md:text-sm font-bold text-slate-800">詞語庫 (點擊或拖拽)</h2>
+                    </div>
+                    <div class="flex items-center gap-2 text-[10px] md:text-xs font-semibold">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 天氣</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-400 inline-block"></span> 物品</span>
+                    </div>
+                </div>
+
+                <!-- Weather Words Group (Blue Frame) -->
+                <div class="flex flex-col justify-start min-h-0">
+                    <h3 class="text-[11px] font-bold text-blue-600 mb-0.5 uppercase tracking-wider flex items-center gap-1 shrink-0">
+                        <i class="fa-solid fa-cloud-sun"></i> 天氣詞語 (藍色框)：
+                    </h3>
+                    <div id="weather-words-container" class="grid grid-cols-3 gap-1.5">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Item Words Group (Yellow Frame) -->
+                <div class="flex flex-col justify-start min-h-0 mt-0.5">
+                    <h3 class="text-[11px] font-bold text-yellow-600 mb-0.5 uppercase tracking-wider flex items-center gap-1 shrink-0">
+                        <i class="fa-solid fa-bag-shopping"></i> 物品詞語 (黃色框)：
+                    </h3>
+                    <div id="item-words-container" class="grid grid-cols-3 gap-1.5">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- BOTTOM SECTION: Sentence Fill-in-the-Blanks & Mandarin Audio Button -->
+        <div class="shrink-0 bg-white rounded-2xl p-2 md:p-2.5 shadow-md border border-sky-100 flex flex-col gap-1.5 md:gap-2">
+            
+            <!-- Sentence Box -->
+            <div class="bg-amber-50/80 rounded-xl p-2 md:p-2.5 border-2 border-dashed border-amber-200">
+                <div class="text-[11px] font-bold text-amber-700 mb-1 flex items-center gap-1">
+                    <i class="fa-solid fa-pen-to-square"></i> 請完成匯報句子：
+                </div>
+
+                <div class="text-sm md:text-lg font-bold leading-relaxed text-slate-800 flex flex-wrap items-center gap-1.5 md:gap-2">
+                    <span>夏天到了，今天</span>
+                    
+                    <!-- Target Drop Zone 1: Weather (藍色框框對應) -->
+                    <div id="drop-weather" 
+                         data-type="weather" 
+                         ondragover="handleDragOver(event)" 
+                         ondragleave="handleDragLeave(event)" 
+                         ondrop="handleDrop(event)"
+                         onclick="handleSlotClick('weather')"
+                         class="inline-flex items-center justify-center min-w-[100px] md:min-w-[120px] h-9 md:h-11 px-2 border-2 border-dashed border-blue-400 bg-blue-50/60 rounded-xl text-blue-800 transition cursor-pointer hover:bg-blue-100 relative group">
+                        <span class="slot-placeholder text-xs text-blue-400 font-semibold">[ 藍色框：天氣 ]</span>
+                    </div>
+                    
+                    <span>，我要帶</span>
+                    
+                    <!-- Target Drop Zone 2: Item (黃色框框對應) -->
+                    <div id="drop-item" 
+                         data-type="item" 
+                         ondragover="handleDragOver(event)" 
+                         ondragleave="handleDragLeave(event)" 
+                         ondrop="handleDrop(event)"
+                         onclick="handleSlotClick('item')"
+                         class="inline-flex items-center justify-center min-w-[100px] md:min-w-[120px] h-9 md:h-11 px-2 border-2 border-dashed border-yellow-400 bg-yellow-50/60 rounded-xl text-yellow-800 transition cursor-pointer hover:bg-yellow-100 relative group">
+                        <span class="slot-placeholder text-xs text-yellow-500 font-semibold">[ 黃色框：物品 ]</span>
+                    </div>
+                    
+                    <span>。</span>
+                </div>
+            </div>
+
+            <!-- Full Sentence Speech Button -->
+            <button id="btn-speak-sentence" 
+                    disabled 
+                    onclick="speakFullSentence()" 
+                    class="w-full py-2 px-3 bg-slate-200 text-slate-400 font-extrabold text-xs md:text-sm rounded-xl flex items-center justify-center gap-2 shadow transition-all duration-300 disabled:cursor-not-allowed">
+                <i class="fa-solid fa-volume-high text-sm"></i>
+                <span>按一下：以普通話讀出完整句子</span>
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Win / Feedback Modal -->
+    <div id="win-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 text-center shadow-2xl border-4 border-amber-300 transform transition-all scale-95">
+            <div class="w-14 h-14 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-2 border-2 border-amber-300 shadow-inner">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h3 class="text-xl font-black text-slate-800 mb-1.5">太棒了！答對了！🎉</h3>
+            <p id="modal-sentence-preview" class="text-sm font-bold text-sky-700 bg-sky-50 p-2.5 rounded-xl mb-3 border border-sky-200">
+                夏天到了，今天...
+            </p>
+            <p class="text-xs text-slate-600 mb-4">你成功完成了夏天匯報句子！現在可以點擊按鈕練習普通話朗讀。</p>
+
+            <div class="flex flex-col gap-2">
+                <button onclick="speakFullSentence(); closeModal();" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-xs md:text-sm">
+                    <i class="fa-solid fa-volume-high text-sm"></i>
+                    <span>聽普通話完整句子</span>
+                </button>
+                <button onclick="resetGame(); closeModal();" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition">
+                    再玩一局 🔄
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Vocabulary Dataset
+        const WORD_DATA = [
+            { id: 'w1', text: '炎熱', pinyin: 'yán rè', type: 'weather', icon: 'fa-temperature-high', isHot: true },
+            { id: 'w2', text: '陽光猛烈', pinyin: 'yáng guāng měng liè', type: 'weather', icon: 'fa-sun', isHot: true },
+            { id: 'w3', text: '下大雨', pinyin: 'xià dà yǔ', type: 'weather', icon: 'fa-cloud-showers-heavy', isRain: true },
+
+            { id: 'i1', text: '水壺', pinyin: 'shuǐ hú', type: 'item', icon: 'fa-bottle-water', isHot: true, isRain: true },
+            { id: 'i2', text: '太陽帽', pinyin: 'tài yáng mào', type: 'item', icon: 'fa-hat-cowboy-side', isHot: true },
+            { id: 'i3', text: '雨傘', pinyin: 'yǔ sǎn', type: 'item', icon: 'fa-umbrella', isRain: true },
+            { id: 'i4', text: '雨衣', pinyin: 'yǔ yī', type: 'item', icon: 'fa-vest', isRain: true },
+            { id: 'i5', text: '小扇子', pinyin: 'xiǎo shàn zi', type: 'item', icon: 'fa-fan', isHot: true },
+            { id: 'i6', text: '防曬霜', pinyin: 'fáng shài shuāng', type: 'item', icon: 'fa-pump-soap', isHot: true }
+        ];
+
+        // 專屬陽光 (Sunny) 照片庫（與用戶附件特徵一致的高清圖片）
+        const SUNNY_IMAGES = [
+            {
+                url: 'https://images.unsplash.com/photo-1601297183305-6df142704ea2?auto=format&fit=crop&w=800&q=80',
+                alt: '耀眼陽光與白雲'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
+                alt: '晴朗陽光蔚藍大海'
+            }
+        ];
+
+        // 專屬下雨 (Rainy) 高清實景照片
+        const RAINY_IMAGES = [
+            {
+                url: 'https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=800&q=80',
+                alt: '下雨水滴'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?auto=format&fit=crop&w=800&q=80',
+                alt: '傾盆大雨'
+            }
+        ];
+
+        // State Variables
+        let currentScenario = null;
+        let currentAnswers = { weather: null, item: null };
+        let selectedWordId = null;
+        let isAudioEnabled = true;
+
+        const audioCache = {};
+        let currentAudioPlayer = null;
+
+        function playSound(type) {
+            if (!isAudioEnabled) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+
+                if (type === 'correct') {
+                    const osc1 = ctx.createOscillator();
+                    const gain1 = ctx.createGain();
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+                    osc1.frequency.setValueAtTime(783.99, ctx.currentTime + 0.12);
+                    gain1.gain.setValueAtTime(0.2, ctx.currentTime);
+                    gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                    osc1.connect(gain1);
+                    gain1.connect(ctx.destination);
+                    osc1.start();
+                    osc1.stop(ctx.currentTime + 0.35);
+                } else if (type === 'wrong') {
+                    const osc2 = ctx.createOscillator();
+                    const gain2 = ctx.createGain();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.setValueAtTime(164.81, ctx.currentTime);
+                    osc2.frequency.setValueAtTime(130.81, ctx.currentTime + 0.15);
+                    gain2.gain.setValueAtTime(0.2, ctx.currentTime);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                    osc2.connect(gain2);
+                    gain2.connect(ctx.destination);
+                    osc2.start();
+                    osc2.stop(ctx.currentTime + 0.3);
+                }
+            } catch (e) {}
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16Data, sampleRate) {
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const blockAlign = numChannels * (bitsPerSample / 8);
+            const dataSize = pcm16Data.length * 2;
+            const chunkSize = 36 + dataSize;
+            
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+            
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, chunkSize, true);
+            writeString(view, 8, 'WAVE');
+            
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+            
+            let offset = 44;
+            for (let i = 0; i < pcm16Data.length; i++, offset += 2) {
+                view.setInt16(offset, pcm16Data[i], true);
+            }
+            
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        async function speakText(text) {
+            if (!isAudioEnabled) return;
+
+            if (currentAudioPlayer) {
+                currentAudioPlayer.pause();
+                currentAudioPlayer = null;
+            }
+
+            if (audioCache[text]) {
+                currentAudioPlayer = new Audio(audioCache[text]);
+                currentAudioPlayer.play().catch(e => console.warn(e));
+                return;
+            }
+
+            try {
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{
+                        parts: [{ text: `請用標準國語/普通話讀出：${text}` }]
+                    }],
+                    generationConfig: {
+                        responseModalities: ["AUDIO"],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: { voiceName: "Kore" }
+                            }
+                        }
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType || "audio/L16;rate=24000";
+
+                    if (audioData) {
+                        let sampleRate = 24000;
+                        const match = mimeType.match(/rate=(\d+)/);
+                        if (match && match[1]) sampleRate = parseInt(match[1], 10);
+                        
+                        const pcmData = base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmData);
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+                        const audioUrl = URL.createObjectURL(wavBlob);
+
+                        audioCache[text] = audioUrl;
+                        currentAudioPlayer = new Audio(audioUrl);
+                        currentAudioPlayer.play();
+                        return;
+                    }
+                }
+            } catch (err) {}
+
+            try {
+                const onlineMandarinUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&le=zh`;
+                currentAudioPlayer = new Audio(onlineMandarinUrl);
+                currentAudioPlayer.play().catch(() => speakTextWebSpeechFallback(text));
+            } catch (e) {
+                speakTextWebSpeechFallback(text);
+            }
+        }
+
+        function speakTextWebSpeechFallback(text) {
+            const synth = window.speechSynthesis;
+            if (!synth) return;
+            synth.cancel();
+
+            const voices = synth.getVoices() || [];
+            const mandarinVoice = voices.find(v => {
+                const lang = (v.lang || '').toLowerCase();
+                const name = (v.name || '').toLowerCase();
+                const isCanto = lang.includes('hk') || lang.includes('yue') || name.includes('cantonese') || name.includes('sin-ji') || name.includes('粵語') || name.includes('廣東話');
+                return !isCanto && (lang.includes('zh-cn') || lang.includes('zh-tw') || name.includes('putonghua') || name.includes('mandarin') || name.includes('國語'));
+            });
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-CN';
+            if (mandarinVoice) utterance.voice = mandarinVoice;
+            utterance.rate = 0.85;
+            synth.speak(utterance);
+        }
+
+        function toggleAudio() {
+            isAudioEnabled = !isAudioEnabled;
+            const soundIcon = document.getElementById('sound-icon');
+            const soundText = document.getElementById('sound-text');
+            if (isAudioEnabled) {
+                soundIcon.className = 'fa-solid fa-volume-high';
+                soundText.innerText = '普通話發音：開啟';
+            } else {
+                soundIcon.className = 'fa-solid fa-volume-xmark';
+                soundText.innerText = '普通話發音：靜音';
+                if (currentAudioPlayer) currentAudioPlayer.pause();
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+            }
+        }
+
+        function initGame() {
+            currentAnswers = { weather: null, item: null };
+            selectedWordId = null;
+
+            currentScenario = Math.random() < 0.5 ? 'sunny' : 'rainy';
+
+            renderWeatherImage();
+            renderWordCards();
+            updateSlotsUI();
+            updateSpeakButton();
+        }
+
+        function renderWeatherImage() {
+            const container = document.getElementById('weather-image-container');
+
+            if (currentScenario === 'sunny') {
+                const photo = SUNNY_IMAGES[Math.floor(Math.random() * SUNNY_IMAGES.length)];
+                container.innerHTML = `
+                    <div class="relative w-full h-36 md:h-40 overflow-hidden rounded-xl shadow-md border-2 border-amber-300 group flex items-center justify-center">
+                        <img src="${photo.url}" 
+                             alt="${photo.alt}" 
+                             onerror="this.onerror=null; this.src='https://placehold.co/600x400/f59e0b/ffffff?text=%E9%99%BD%E5%85%89%E7%8C%9B%E7%83%88';" 
+                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    </div>
+                `;
+            } else {
+                const photo = RAINY_IMAGES[Math.floor(Math.random() * RAINY_IMAGES.length)];
+                container.innerHTML = `
+                    <div class="relative w-full h-36 md:h-40 overflow-hidden rounded-xl shadow-md border-2 border-blue-400 group flex items-center justify-center">
+                        <img src="${photo.url}" 
+                             alt="${photo.alt}" 
+                             onerror="this.onerror=null; this.src='https://placehold.co/600x400/2563eb/ffffff?text=%E4%B8%8B%E5%A4%A7%E9%9B%A8';" 
+                             class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    </div>
+                `;
+            }
+        }
+
+        function renderWordCards() {
+            const weatherContainer = document.getElementById('weather-words-container');
+            const itemContainer = document.getElementById('item-words-container');
+
+            weatherContainer.innerHTML = '';
+            itemContainer.innerHTML = '';
+
+            const shuffled = [...WORD_DATA].sort(() => Math.random() - 0.5);
+
+            shuffled.forEach(item => {
+                const isWeather = item.type === 'weather';
+                
+                const borderClass = isWeather 
+                    ? 'border-2 border-blue-400 bg-blue-50/50 hover:bg-blue-100/70 text-blue-900' 
+                    : 'border-2 border-amber-400 bg-amber-50/50 hover:bg-amber-100/70 text-amber-900';
+
+                const cardHtml = `
+                    <div id="card-${item.id}"
+                         draggable="true" 
+                         ondragstart="handleDragStart(event, '${item.id}')"
+                         onclick="handleCardClick('${item.id}')"
+                         class="word-card ${borderClass} rounded-xl p-1.5 pt-2 shadow-sm hover:shadow transition-all cursor-grab active:cursor-grabbing flex flex-col items-center justify-center select-none relative group">
+                        
+                        <!-- 語音按鈕定位於右上角，不影響拼音居中 -->
+                        <button onclick="event.stopPropagation(); speakText('${item.text}')" 
+                                class="absolute top-1 right-1 w-4 h-4 md:w-5 md:h-5 rounded-full bg-white/80 hover:bg-white text-sky-600 flex items-center justify-center text-[9px] md:text-[10px] shadow-sm transition shrink-0 z-10" 
+                                title="聽語音">
+                            <i class="fa-solid fa-volume-high"></i>
+                        </button>
+
+                        <!-- 文字正上方的居中拼音 -->
+                        <span class="font-pinyin text-[10px] md:text-[11px] font-semibold text-slate-500 tracking-wide text-center leading-tight mb-0.5">${item.pinyin}</span>
+
+                        <!-- 圖標與中文詞語 -->
+                        <div class="flex items-center justify-center gap-1">
+                            <i class="fa-solid ${item.icon} text-xs opacity-80"></i>
+                            <span class="text-xs md:text-sm font-black">${item.text}</span>
+                        </div>
+                    </div>
+                `;
+
+                if (isWeather) {
+                    weatherContainer.innerHTML += cardHtml;
+                } else {
+                    itemContainer.innerHTML += cardHtml;
+                }
+            });
+        }
+
+        function handleDragStart(e, wordId) {
+            e.dataTransfer.setData('text/plain', wordId);
+            selectedWordId = wordId;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('drop-zone-active');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('drop-zone-active');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drop-zone-active');
+            const wordId = e.dataTransfer.getData('text/plain') || selectedWordId;
+            const slotType = e.currentTarget.getAttribute('data-type');
+            
+            if (wordId) {
+                placeWordIntoSlot(wordId, slotType);
+            }
+        }
+
+        function handleCardClick(wordId) {
+            document.querySelectorAll('.word-card').forEach(c => c.classList.remove('ring-4', 'ring-blue-400', 'scale-105'));
+
+            if (selectedWordId === wordId) {
+                selectedWordId = null;
+            } else {
+                selectedWordId = wordId;
+                const card = document.getElementById(`card-${wordId}`);
+                if (card) {
+                    card.classList.add('ring-4', 'ring-blue-400', 'scale-105');
+                }
+            }
+        }
+
+        function handleSlotClick(slotType) {
+            if (selectedWordId) {
+                placeWordIntoSlot(selectedWordId, slotType);
+                selectedWordId = null;
+                document.querySelectorAll('.word-card').forEach(c => c.classList.remove('ring-4', 'ring-blue-400', 'scale-105'));
+            } else if (currentAnswers[slotType]) {
+                currentAnswers[slotType] = null;
+                updateSlotsUI();
+                checkSentenceCompletion();
+            }
+        }
+
+        function placeWordIntoSlot(wordId, slotType) {
+            const word = WORD_DATA.find(w => w.id === wordId);
+            if (!word) return;
+
+            if (word.type !== slotType) {
+                playSound('wrong');
+                return;
+            }
+
+            let isCorrect = false;
+            if (currentScenario === 'sunny') {
+                if (slotType === 'weather' && word.isHot) isCorrect = true;
+                if (slotType === 'item' && word.isHot) isCorrect = true;
+            } else if (currentScenario === 'rainy') {
+                if (slotType === 'weather' && word.isRain) isCorrect = true;
+                if (slotType === 'item' && word.isRain) isCorrect = true;
+            }
+
+            if (isCorrect) {
+                currentAnswers[slotType] = word;
+                playSound('correct');
+                updateSlotsUI();
+                checkSentenceCompletion();
+            } else {
+                playSound('wrong');
+            }
+        }
+
+        function updateSlotsUI() {
+            const weatherSlot = document.getElementById('drop-weather');
+            if (currentAnswers.weather) {
+                weatherSlot.innerHTML = `
+                    <div class="flex items-center gap-1.5 bg-blue-500 text-white px-2 py-0.5 rounded-lg font-black text-xs md:text-sm shadow">
+                        <i class="fa-solid ${currentAnswers.weather.icon}"></i>
+                        <span>${currentAnswers.weather.text}</span>
+                        <button onclick="event.stopPropagation(); speakText('${currentAnswers.weather.text}')" 
+                                class="w-4 h-4 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center text-[9px] transition">
+                            <i class="fa-solid fa-volume-high"></i>
+                        </button>
+                        <i class="fa-solid fa-circle-xmark text-xs cursor-pointer opacity-80 hover:opacity-100 ml-0.5" onclick="event.stopPropagation(); clearSlot('weather')" title="清除"></i>
+                    </div>
+                `;
+                weatherSlot.classList.remove('border-dashed');
+                weatherSlot.classList.add('border-solid', 'border-blue-500');
+            } else {
+                weatherSlot.innerHTML = `<span class="slot-placeholder text-xs text-blue-400 font-semibold">[ 藍色框：天氣 ]</span>`;
+                weatherSlot.classList.add('border-dashed');
+            }
+
+            const itemSlot = document.getElementById('drop-item');
+            if (currentAnswers.item) {
+                itemSlot.innerHTML = `
+                    <div class="flex items-center gap-1.5 bg-amber-500 text-white px-2 py-0.5 rounded-lg font-black text-xs md:text-sm shadow">
+                        <i class="fa-solid ${currentAnswers.item.icon}"></i>
+                        <span>${currentAnswers.item.text}</span>
+                        <button onclick="event.stopPropagation(); speakText('${currentAnswers.item.text}')" 
+                                class="w-4 h-4 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center text-[9px] transition">
+                            <i class="fa-solid fa-volume-high"></i>
+                        </button>
+                        <i class="fa-solid fa-circle-xmark text-xs cursor-pointer opacity-80 hover:opacity-100 ml-0.5" onclick="event.stopPropagation(); clearSlot('item')" title="清除"></i>
+                    </div>
+                `;
+                itemSlot.classList.remove('border-dashed');
+                itemSlot.classList.add('border-solid', 'border-yellow-400');
+            } else {
+                itemSlot.innerHTML = `<span class="slot-placeholder text-xs text-yellow-500 font-semibold">[ 黃色框：物品 ]</span>`;
+                itemSlot.classList.add('border-dashed');
+            }
+
+            WORD_DATA.forEach(w => {
+                const card = document.getElementById(`card-${w.id}`);
+                if (card) {
+                    if ((currentAnswers.weather && currentAnswers.weather.id === w.id) ||
+                        (currentAnswers.item && currentAnswers.item.id === w.id)) {
+                        card.classList.add('opacity-30', 'pointer-events-none');
+                    } else {
+                        card.classList.remove('opacity-30', 'pointer-events-none');
+                    }
+                }
+            });
+        }
+
+        function clearSlot(type) {
+            currentAnswers[type] = null;
+            updateSlotsUI();
+            updateSpeakButton();
+        }
+
+        function checkSentenceCompletion() {
+            if (currentAnswers.weather && currentAnswers.item) {
+                updateSpeakButton(true);
+
+                try {
+                    confetti({
+                        particleCount: 70,
+                        spread: 60,
+                        origin: { y: 0.6 }
+                    });
+                } catch (e) {}
+
+                setTimeout(() => {
+                    const fullText = getFullSentenceText();
+                    document.getElementById('modal-sentence-preview').innerText = fullText;
+                    document.getElementById('win-modal').classList.remove('hidden');
+                }, 400);
+            } else {
+                updateSpeakButton(false);
+            }
+        }
+
+        function getFullSentenceText() {
+            const wText = currentAnswers.weather ? currentAnswers.weather.text : '';
+            const iText = currentAnswers.item ? currentAnswers.item.text : '';
+            return `夏天到了，今天${wText}，我要帶${iText}。`;
+        }
+
+        function updateSpeakButton(enabled = false) {
+            const btn = document.getElementById('btn-speak-sentence');
+            if (enabled && currentAnswers.weather && currentAnswers.item) {
+                btn.disabled = false;
+                btn.className = "w-full py-2 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs md:text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 cursor-pointer animate-pulse shrink-0";
+            } else {
+                btn.disabled = true;
