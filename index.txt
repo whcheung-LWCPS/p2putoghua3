@@ -625,7 +625,7 @@
             const imageContainer = document.getElementById('weather-image-container');
             imageContainer.innerHTML = `
                 ${currentWeather.svg}
-<span class="text-[10px] text-sky-300/80 font-mono mt-0.5">天氣情境圖</span>
+                <span class="text-[10px] text-sky-300/80 font-mono mt-0.5">天氣情境圖</span>
             `;
 
             clearSlot();
