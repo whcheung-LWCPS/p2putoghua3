@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物品配對大冒險 - 小二普通話自主學習</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 答錯抖動動畫 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px) rotate(-2deg); }
+            40%, 80% { transform: translateX(6px) rotate(2deg); }
+        }
+        .animate-shake {
+            animation: shake 0.4s ease-in-out;
+        }
+
+        /* 放置卡片彈出動畫 */
+        @keyframes popIn {
+            0% { transform: scale(0.85); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* 加分漂浮動畫 */
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-30px) scale(1.1); }
+        }
+        .float-score {
+            animation: floatUp 0.7s ease-out forwards;
+        }
+
+        /* 自訂細微滾動條 (以防極小螢幕) */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        * {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
+</head>
+<body class="bg-amber-50 h-screen w-screen overflow-hidden text-slate-800 flex flex-col p-1.5 sm:p-2.5 gap-1.5 sm:gap-2 selection:bg-amber-200">
+
+    <!-- 頂部頁頭 -->
+    <header class="bg-white/95 backdrop-blur rounded-xl border border-amber-200 px-2.5 py-1.5 shadow-2xs shrink-0">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0">
+                <div class="bg-gradient-to-tr from-orange-400 to-amber-300 p-1 sm:p-1.5 rounded-lg shadow-2xs text-white text-base sm:text-xl shrink-0">
+                    ☀️
+                </div>
+                <div class="min-w-0">
+                    <h1 class="text-sm sm:text-base font-black text-slate-800 tracking-tight flex items-center gap-2 truncate">
+                        物品配對大冒險
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200 hidden md:inline-block">小二普通話自主學習</span>
+                    </h1>
+                </div>
+            </div>
+
+            <!-- 右側功能與得分 -->
+            <div class="flex items-center gap-1.5 shrink-0">
+                <div class="bg-amber-100/80 px-2 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1 font-black text-amber-900 text-xs sm:text-sm relative">
+                    <span>得分:</span>
+                    <span id="score-display" class="text-sm sm:text-base text-orange-600 font-extrabold">0</span>
+                </div>
+                <button id="sound-toggle" onclick="toggleSound()" class="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition border border-slate-200 text-xs sm:text-sm" title="開啟/靜音">
+                    🔊
+                </button>
+                <button onclick="restartGame()" class="p-1 px-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg shadow-2xs transition font-bold text-xs flex items-center gap-1 active:scale-95">
+                    🔄 重來
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 進度條與提示訊息 -->
+    <div class="bg-white rounded-xl px-2.5 py-1 shadow-2xs border border-amber-100 flex items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-1.5 shrink-0">
+            <span class="text-[11px] sm:text-xs font-bold text-slate-500 whitespace-nowrap">進度:</span>
+            <div class="w-16 sm:w-28 bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
+                <div id="progress-bar" class="bg-gradient-to-r from-amber-400 to-orange-500 h-full w-0 transition-all duration-300 rounded-full"></div>
+            </div>
+            <span id="progress-text" class="text-[11px] sm:text-xs font-black text-slate-700 whitespace-nowrap">0 / 8</span>
+        </div>
+        
+        <div id="hint-box" class="text-[11px] sm:text-xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 text-center truncate flex-1 min-w-0">
+            💡 提示：把物品拖曳或點擊放進「天氣炎熱」或「下雨」欄位！
+        </div>
+    </div>
+
+    <!-- 主要內容區域：三欄式布局 (左：天氣炎熱 | 中：下雨 | 右：待分類物品) -->
+    <main id="main-container" class="flex-1 min-h-0 grid grid-cols-3 gap-1.5 sm:gap-2.5 transition-all duration-300 overflow-hidden">
+        
+        <!-- 左欄：天氣炎熱 區塊 -->
+        <div id="zone-hot" 
+             ondragover="handleDragOver(event)" 
+             ondragleave="handleDragLeave(event)" 
+             ondrop="handleDrop(event, 'hot')"
+             onclick="handleZoneClick('hot')"
+             class="group relative bg-gradient-to-b from-amber-100/90 via-orange-50 to-amber-50/50 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border-2 border-dashed border-orange-300 hover:border-orange-500 transition-all duration-200 flex flex-col justify-between shadow-2xs cursor-pointer h-full overflow-hidden">
+            
+            <div class="flex items-center justify-between border-b border-orange-200/60 pb-1 mb-1 pointer-events-none shrink-0">
+                <div class="flex items-center gap-1 sm:gap-1.5">
+                    <span class="text-base sm:text-xl">☀️</span>
+                    <div>
+                        <h2 class="text-xs sm:text-sm md:text-base font-black text-orange-900 leading-tight">天氣炎熱</h2>
+                        <p class="text-[9px] sm:text-[10px] text-orange-600 font-bold leading-none hidden sm:block">陽光充沛、氣溫高</p>
+                    </div>
+                </div>
+                <span class="bg-orange-200/80 text-orange-900 text-[10px] sm:text-[11px] font-black px-1.5 py-0.5 rounded-full text-center" id="hot-count">0 件</span>
+            </div>
+
+            <!-- 天氣炎熱物品放置池 -->
+            <div id="hot-items" class="grid grid-cols-1 sm:grid-cols-2 gap-1 flex-1 content-start overflow-y-auto">
+                <!-- 動態加載已分類的天氣炎熱物品 -->
+            </div>
+
+            <div class="text-center text-[9px] sm:text-[10px] font-extrabold text-orange-400/90 mt-0.5 pointer-events-none shrink-0 truncate">
+                ⬇️ 放置「天氣炎熱物品」
+            </div>
+        </div>
+
+        <!-- 中欄：下雨 區塊 -->
+        <div id="zone-rainy" 
+             ondragover="handleDragOver(event)" 
+             ondragleave="handleDragLeave(event)" 
+             ondrop="handleDrop(event, 'rainy')"
+             onclick="handleZoneClick('rainy')"
+             class="group relative bg-gradient-to-b from-blue-100/90 via-sky-50 to-cyan-50/50 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border-2 border-dashed border-blue-300 hover:border-blue-500 transition-all duration-200 flex flex-col justify-between shadow-2xs cursor-pointer h-full overflow-hidden">
+            
+            <div class="flex items-center justify-between border-b border-blue-200/60 pb-1 mb-1 pointer-events-none shrink-0">
+                <div class="flex items-center gap-1 sm:gap-1.5">
+                    <span class="text-base sm:text-xl">🌧️</span>
+                    <div>
+                        <h2 class="text-xs sm:text-sm md:text-base font-black text-blue-900 leading-tight">下雨</h2>
+                        <p class="text-[9px] sm:text-[10px] text-blue-600 font-bold leading-none hidden sm:block">天空下雨、外出帶雨具</p>
+                    </div>
+                </div>
+                <span class="bg-blue-200/80 text-blue-900 text-[10px] sm:text-[11px] font-black px-1.5 py-0.5 rounded-full text-center" id="rainy-count">0 件</span>
+            </div>
+
+            <!-- 下雨物品放置池 -->
+            <div id="rainy-items" class="grid grid-cols-1 sm:grid-cols-2 gap-1 flex-1 content-start overflow-y-auto">
+                <!-- 動態加載已分類的下雨物品 -->
+            </div>
+
+            <div class="text-center text-[9px] sm:text-[10px] font-extrabold text-blue-400/90 mt-0.5 pointer-events-none shrink-0 truncate">
+                ⬇️ 放置「下雨物品」
+            </div>
+        </div>
+
+        <!-- 右欄：待分類物品欄 -->
+        <div id="pool-column" class="bg-white rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-amber-200 shadow-2xs flex flex-col h-full overflow-hidden">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-1 mb-1 shrink-0">
+                <h3 class="text-[11px] sm:text-xs font-black text-slate-700 flex items-center gap-1">
+                    📦 待分類欄
+                    <span class="text-[10px] font-normal text-slate-400">(剩 <span id="remaining-count">8</span>)</span>
+                </h3>
+            </div>
+
+            <!-- 待分類物品列表 -->
+            <div id="item-pool" class="grid grid-cols-2 gap-1 overflow-y-auto flex-1 content-start">
+                <!-- JavaScript 動態渲染卡片 -->
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        /**
+         * 遊戲資料集 (8個物品：5個天氣炎熱，3個下雨)
+         */
+        const ALL_ITEMS = [
+            {
+                id: 'water_bottle',
+                name: '水壺',
+                pinyin: 'shuǐ hú',
+                category: 'hot',
+                hint: '天氣炎熱，記得多補充水分！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="22" y="8" width="20" height="8" rx="3" fill="#0284C7"/>
+                    <rect x="26" y="4" width="12" height="5" rx="2" fill="#38BDF8"/>
+                    <rect x="18" y="16" width="28" height="42" rx="8" fill="#38BDF8"/>
+                    <path d="M22 24H42V48C42 52.4183 38.4183 56 34 56H30C25.5817 56 22 52.4183 22 48V24Z" fill="#0284C7" opacity="0.3"/>
+                    <rect x="18" y="28" width="28" height="6" fill="#0284C7"/>
+                    <circle cx="32" cy="42" r="4" fill="white"/>
+                </svg>`
+            },
+            {
+                id: 'sun_hat',
+                name: '太陽帽',
+                pinyin: 'tài yáng mào',
+                category: 'hot',
+                hint: '大太陽下戴上太陽帽，可以遮擋強烈陽光！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <path d="M8 42C8 42 16 38 32 38C48 38 56 42 56 42C58 43 56 48 48 48H16C8 48 6 43 8 42Z" fill="#F59E0B"/>
+                    <path d="M20 38C20 24 24 16 32 16C40 16 44 24 44 38" fill="#FBBF24"/>
+                    <path d="M19 34H45V38H19V34Z" fill="#EF4444"/>
+                    <circle cx="32" cy="36" r="2" fill="#FEF08A"/>
+                </svg>`
+            },
+            {
+                id: 'fan',
+                name: '小扇子',
+                pinyin: 'xiǎo shàn zi',
+                category: 'hot',
+                hint: '天氣炎熱時扇一扇小扇子，能帶來陣陣清涼！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <path d="M32 44L10 20C18 10 46 10 54 20L32 44Z" fill="#38BDF8"/>
+                    <path d="M32 44L18 17C24 12 40 12 46 17L32 44Z" fill="#818CF8"/>
+                    <path d="M32 40V58" stroke="#E2E8F0" stroke-width="4" stroke-linecap="round"/>
+                    <circle cx="32" cy="44" r="3" fill="#F43F5E"/>
+                </svg>`
+            },
+            {
+                id: 'sunscreen',
+                name: '防曬霜',
+                pinyin: 'fáng shài shuāng',
+                category: 'hot',
+                hint: '戶外活動塗抹防曬霜，保護皮膚不被太陽晒傷！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <rect x="24" y="8" width="16" height="8" rx="2" fill="#38BDF8"/>
+                    <path d="M20 20C20 17 22 16 26 16H38C42 16 44 17 44 20L48 54C48 57 45 58 42 58H22C19 58 16 57 16 54L20 20Z" fill="#FB923C"/>
+                    <circle cx="32" cy="36" r="7" fill="#FEF08A"/>
+                    <path d="M32 26V28M32 44V46M22 36H24M40 36H42" stroke="#F97316" stroke-width="2" stroke-linecap="round"/>
+                </svg>`
+            },
+            {
+                id: 'sunglasses',
+                name: '太陽眼鏡',
+                pinyin: 'tài yáng yǎn jìng',
+                category: 'hot',
+                hint: '戴上太陽眼鏡，保護眼睛不受強烈陽光刺激！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <rect x="8" y="24" width="22" height="16" rx="5" fill="#1E293B"/>
+                    <rect x="34" y="24" width="22" height="16" rx="5" fill="#1E293B"/>
+                    <path d="M30 28H34" stroke="#475569" stroke-width="3"/>
+                    <path d="M8 28L2 22" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M56 28L62 22" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+                    <line x1="12" y1="28" x2="20" y2="36" stroke="#38BDF8" stroke-width="2" opacity="0.6"/>
+                    <line x1="38" y1="28" x2="46" y2="36" stroke="#38BDF8" stroke-width="2" opacity="0.6"/>
+                </svg>`
+            },
+            {
+                id: 'umbrella',
+                name: '雨傘',
+                pinyin: 'yǔ sǎn',
+                category: 'rainy',
+                hint: '下雨天出門帶雨傘，就不會被雨水淋濕！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <path d="M32 10C14 10 8 32 8 32H56C56 32 50 10 32 10Z" fill="#EC4899"/>
+                    <path d="M32 10C24 10 20 32 20 32H44C44 32 40 10 32 10Z" fill="#F472B6"/>
+                    <path d="M32 32V52C32 54.2091 30.2091 56 28 56C25.7909 56 24 54.2091 24 52" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+                    <path d="M32 6V10" stroke="#475569" stroke-width="3" stroke-linecap="round"/>
+                </svg>`
+            },
+            {
+                id: 'raincoat',
+                name: '雨衣',
+                pinyin: 'yǔ yī',
+                category: 'rainy',
+                hint: '下雨天穿上雨衣，保持身體乾爽不淋濕！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <path d="M22 12C22 8 26 6 32 6C38 6 42 8 42 12V20H22V12Z" fill="#EAB308"/>
+                    <path d="M14 24L22 18V54H42V18L50 24L56 42L48 44L44 28V56H20V28L16 44L8 42L14 24Z" fill="#FACC15"/>
+                    <circle cx="32" cy="28" r="2" fill="#CA8A04"/>
+                    <circle cx="32" cy="38" r="2" fill="#CA8A04"/>
+                    <circle cx="32" cy="48" r="2" fill="#CA8A04"/>
+                </svg>`
+            },
+            {
+                id: 'rain_boots',
+                name: '雨靴',
+                pinyin: 'yǔ xuē',
+                category: 'rainy',
+                hint: '下雨天路面濕滑有水窪，穿雨靴不會弄濕雙腳！',
+                iconSvg: `<svg class="w-8 h-8 sm:w-10 sm:h-10" viewBox="0 0 64 64" fill="none">
+                    <path d="M14 18V44C14 48 18 52 24 52H32V42H22V18H14Z" fill="#0284C7"/>
+                    <path d="M34 18V44C34 48 38 52 44 52H52V42H42V18H34Z" fill="#38BDF8"/>
+                </svg>`
+            }
+        ];
+
+        let state = {
+            remainingItems: [],
+            hotItems: [],
+            rainyItems: [],
+            selectedItemId: null,
+            draggedItemId: null,
+            score: 0,
+            soundEnabled: true
+        };
+
+        let audioCtx = null;
+        let currentMandarinAudio = null;
+        const audioCache = {};
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // PCM 轉 WAV 格式輔助函式 (給 Gemini TTS 使用)
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16, sampleRate = 24000) {
+            const buffer = new ArrayBuffer(44 + pcm16.length * 2);
+            const view = new DataView(buffer);
+
+            function writeString(offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + pcm16.length * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); // PCM
+            view.setUint16(22, 1, true); // 單聲道
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, pcm16.length * 2, true);
+
+            let offset = 44;
+            for (let i = 0; i < pcm16.length; i++, offset += 2) {
+                view.setInt16(offset, pcm16[i], true);
+            }
+
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        async function fetchGeminiMandarinTTS(text) {
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{
+                    parts: [{ text: `請用標準、清晰的中國普通話朗讀這個詞語：${text}` }]
+                }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Leda" }
+                        }
+                    }
+                }
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
+            const part = candidate?.content?.parts?.[0];
+            const audioData = part?.inlineData?.data;
+            const mimeType = part?.inlineData?.mimeType;
+
+            if (audioData && mimeType) {
+                const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+                const pcmBytes = base64ToArrayBuffer(audioData);
+                const pcm16 = new Int16Array(pcmBytes);
+                const wavBlob = pcmToWav(pcm16, sampleRate);
+                return URL.createObjectURL(wavBlob);
+            }
+            throw new Error('Gemini TTS audio error');
+        }
+
+        async function speakMandarin(text, event) {
+            if (event) event.stopPropagation();
+            initAudio();
+
+            // 停止當前正在播放的聲音
+            if (currentMandarinAudio) {
+                currentMandarinAudio.pause();
+                currentMandarinAudio = null;
+            }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+
+            // 1. 檢查快取（已讀取的語音秒播）
+            if (audioCache[text]) {
+                playAudioUrl(audioCache[text]);
+                return;
+            }
+
+            // 2. 優先調用 Gemini 2.5 Flash TTS (100% 標準普通話)
+            try {
+                const wavUrl = await fetchGeminiMandarinTTS(text);
+                audioCache[text] = wavUrl;
+                playAudioUrl(wavUrl);
+                return;
+            } catch (err) {
+                console.warn('Gemini TTS 網路無法調用，切換至備用普通話語音庫:', err);
+            }
+
+            // 3. 備用線上標準普通話 API
+            const encodedText = encodeURIComponent(text);
+            const primaryTtsUrl = `https://dict.youdao.com/dictvoice?le=zh&audio=${encodedText}`;
+            const secondaryTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=zh-CN&client=tw-ob`;
+
+            const audio = new Audio(primaryTtsUrl);
+            currentMandarinAudio = audio;
+            audio.playbackRate = 0.85;
+
+            audio.play().then(() => {
+                audioCache[text] = primaryTtsUrl;
+            }).catch(() => {
+                const backupAudio = new Audio(secondaryTtsUrl);
+                currentMandarinAudio = backupAudio;
+                backupAudio.playbackRate = 0.85;
+                backupAudio.play().then(() => {
+                    audioCache[text] = secondaryTtsUrl;
+                }).catch(() => {
+                    speakMandarinOfflineStrict(text);
+                });
+            });
+        }
+
+        function playAudioUrl(url) {
+            const audio = new Audio(url);
+            currentMandarinAudio = audio;
+            audio.playbackRate = 0.85;
+            audio.play().catch(() => {});
+        }
+
+        function speakMandarinOfflineStrict(text) {
+            if (!('speechSynthesis' in window)) return;
+
+            const voices = window.speechSynthesis.getVoices();
+            // 嚴格篩選普通話發音，堅決排除所有廣東話/粵語/zh-HK/Cantonese
+            const mandarinVoice = voices.find(v => 
+                (v.lang === 'zh-CN' || v.lang === 'zh_CN' || v.lang.startsWith('zh-Hans') || v.lang.includes('Mandarin') || v.lang.includes('Putonghua') || v.name.includes('Mainland') || v.name.includes('Huihui') || v.name.includes('Ting-Ting') || v.name.includes('Yaoyao')) &&
+                !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('hong kong')
+            );
+
+            if (!mandarinVoice) {
+                console.warn('未能在本機找到明確的普通話語音庫，已終止離線播放以防止誤播廣東話。');
+                return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.8;
+            utterance.voice = mandarinVoice;
+            utterance.lang = 'zh-CN';
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => {
+                window.speechSynthesis.getVoices();
+            };
+        }
+
+        function playSound(type) {
+            if (!state.soundEnabled) return;
+            initAudio();
+            if (!audioCtx) return;
+
+            try {
+                if (type === 'correct') {
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.12); // E5
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'wrong') {
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.linearRampToValueAtTime(120, now + 0.25);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'win') {
+                    const notes = [523.25, 659.25, 783.99, 1046.50];
+                    notes.forEach((freq, i) => {
+                        const now = audioCtx.currentTime + i * 0.12;
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(freq, now);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.3);
+                    });
+                }
+            } catch (e) {
+                console.warn('Audio playback error:', e);
+            }
+        }
+
+        function handleDragStart(e, id) {
+            initAudio();
+            state.draggedItemId = id;
+            e.dataTransfer.setData('text/plain', id);
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+        }
+
+        function handleDrop(e, category) {
+            e.preventDefault();
+            const itemId = e.dataTransfer.getData('text/plain') || state.draggedItemId;
+            if (itemId) {
+                processClassification(itemId, category);
+                state.draggedItemId = null;
+            }
+        }
+
+        function initGame() {
+            // 洗牌隨機打亂物品順序
+            const shuffled = [...ALL_ITEMS].sort(() => Math.random() - 0.5);
+
+            state.remainingItems = shuffled;
+            state.hotItems = [];
+            state.rainyItems = [];
+            state.selectedItemId = null;
+            state.draggedItemId = null;
+            state.score = 0;
+
+            updateScoreUI();
+            renderAllPools();
+            showHint('💡 點擊 🔊 聽普通話，把物品拖曳或點擊放進「天氣炎熱」或「下雨」欄位！');
+        }
+
+        function restartGame() {
+            initGame();
+        }
+
+        function toggleSound() {
+            state.soundEnabled = !state.soundEnabled;
+            const btn = document.getElementById('sound-toggle');
+            btn.textContent = state.soundEnabled ? '🔊' : '🔇';
+            btn.title = state.soundEnabled ? '已開啟音效' : '已靜音';
+        }
+
+        function showHint(text) {
+            const hintBox = document.getElementById('hint-box');
+            if (hintBox) {
+                hintBox.textContent = text;
+            }
+        }
+
+        function triggerScoreEffect(score) {
+            const display = document.getElementById('score-display');
+            if (!display) return;
+            const floatEl = document.createElement('span');
+            floatEl.className = 'absolute -top-4 right-0 text-orange-600 font-black text-xs float-score pointer-events-none';
+            floatEl.textContent = `+${score}`;
+            display.parentElement.appendChild(floatEl);
+            setTimeout(() => floatEl.remove(), 700);
+        }
+
+        function updateScoreUI() {
+            document.getElementById('score-display').textContent = state.score;
+        }
+
+        function renderAllPools() {
+            const isCompleted = state.remainingItems.length === 0;
+            const mainContainer = document.getElementById('main-container');
+            const poolColumn = document.getElementById('pool-column');
+
+            // 完成挑戰時：隱藏待分類欄，將主佈局改為放大雙欄 (grid-cols-2)
+            if (isCompleted) {
+                if (poolColumn) poolColumn.classList.add('hidden');
+                if (mainContainer) {
+                    mainContainer.classList.remove('grid-cols-3');
+                    mainContainer.classList.add('grid-cols-2');
+                }
+            } else {
+                if (poolColumn) poolColumn.classList.remove('hidden');
+                if (mainContainer) {
+                    mainContainer.classList.remove('grid-cols-2');
+                    mainContainer.classList.add('grid-cols-3');
+                }
+            }
+
+            // 1. 渲染右側待分類區
+            const poolEl = document.getElementById('item-pool');
+            poolEl.innerHTML = '';
+
+            if (!isCompleted) {
+                state.remainingItems.forEach(item => {
+                    const isSelected = state.selectedItemId === item.id;
+                    const card = document.createElement('div');
+                    card.id = `item-${item.id}`;
+                    card.draggable = true;
+                    card.className = `bg-white rounded-lg p-1 border-2 cursor-pointer transition-all duration-150 flex flex-col items-center justify-between gap-0.5 shadow-2xs hover:shadow-xs ${
+                        isSelected 
+                        ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-200 scale-[1.01]' 
+                        : 'border-amber-100 hover:border-amber-300'
+                    }`;
+
+                    card.ondragstart = (e) => handleDragStart(e, item.id);
+                    card.onclick = (e) => {
+                        e.stopPropagation();
+                        handleItemClick(item.id);
+                    };
+
+                    card.innerHTML = `
+                        <div class="pointer-events-none shrink-0 transform scale-75 sm:scale-90 origin-center">${item.iconSvg}</div>
+                        <div class="text-center pointer-events-none w-full min-w-0">
+                            <span class="text-[9px] sm:text-[10px] text-amber-700 font-bold block leading-tight truncate">${item.pinyin}</span>
+                            <span class="font-black text-xs sm:text-sm text-slate-800 block leading-tight truncate">${item.name}</span>
+                        </div>
+                        <button onclick="speakMandarin('${item.name}', event)" class="p-0.5 px-2 bg-amber-100 hover:bg-amber-200 active:scale-95 text-amber-900 rounded-full text-[10px] font-bold transition flex items-center justify-center" title="收聽普通話發音">
+                            🔊
+                        </button>
+                    `;
+                    poolEl.appendChild(card);
+                });
+            }
+
+            // 2. 渲染左側天氣炎熱區
+            const hotEl = document.getElementById('hot-items');
+            hotEl.innerHTML = '';
+            state.hotItems.forEach(item => {
+                hotEl.appendChild(createPlacedCard(item, 'hot', isCompleted));
+            });
+
+            // 3. 渲染中間下雨區
+            const rainyEl = document.getElementById('rainy-items');
+            rainyEl.innerHTML = '';
+            state.rainyItems.forEach(item => {
+                rainyEl.appendChild(createPlacedCard(item, 'rainy', isCompleted));
+            });
+
+            // 4. 更新數量指標
+            document.getElementById('remaining-count').textContent = state.remainingItems.length;
+            document.getElementById('hot-count').textContent = `${state.hotItems.length} 件`;
+            document.getElementById('rainy-count').textContent = `${state.rainyItems.length} 件`;
+
+            // 5. 更新進度條
+            const total = ALL_ITEMS.length;
+            const completed = total - state.remainingItems.length;
+            const percent = Math.round((completed / total) * 100);
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+            document.getElementById('progress-text').textContent = `${completed} / ${total}`;
+        }
+
+        function createPlacedCard(item, zone, isCompleted = false) {
+            const card = document.createElement('div');
+            const isHot = zone === 'hot';
+
+            if (isCompleted) {
+                // 完成後的放大版卡片
+                card.className = `animate-pop rounded-xl p-2 flex items-center gap-2 border shadow-2xs ${
+                    isHot ? 'bg-amber-100/95 border-amber-300 text-orange-950' : 'bg-blue-100/95 border-blue-300 text-blue-950'
+                }`;
+                card.innerHTML = `
+                    <div class="w-8 h-8 shrink-0 flex items-center justify-center transform scale-90">${item.iconSvg}</div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="text-xs ${isHot ? 'text-orange-800' : 'text-blue-800'} font-black leading-tight truncate">${item.pinyin}</span>
+                        <span class="font-black text-base sm:text-lg text-slate-900 truncate leading-tight">${item.name}</span>
+                    </div>
+                    <button onclick="speakMandarin('${item.name}', event)" class="p-1 px-2.5 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-black shadow-2xs transition active:scale-95 flex items-center justify-center shrink-0 border border-slate-200" title="收聽普通話發音">
+                        🔊
+                    </button>
+                `;
+            } else {
+                // 一般遊玩中卡片
+                card.className = `animate-pop rounded-lg p-1 flex items-center gap-1.5 border shadow-2xs ${
+                    isHot ? 'bg-amber-100/90 border-amber-200 text-orange-950' : 'bg-blue-100/90 border-blue-200 text-blue-950'
+                }`;
+                card.innerHTML = `
+                    <div class="w-6 h-6 shrink-0 flex items-center justify-center transform scale-75">${item.iconSvg}</div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="text-[9px] ${isHot ? 'text-orange-700' : 'text-blue-700'} font-bold leading-none truncate">${item.pinyin}</span>
+                        <span class="font-black text-xs sm:text-sm truncate leading-tight">${item.name}</span>
+                    </div>
+                    <button onclick="speakMandarin('${item.name}', event)" class="p-0.5 px-1.5 bg-white/80 hover:bg-white text-slate-700 rounded-md text-[10px] shadow-2xs transition active:scale-90 flex items-center justify-center shrink-0" title="收聽普通話發音">
+                        🔊
+                    </button>
+                `;
+            }
+            return card;
+        }
+
+        function handleItemClick(id) {
+            initAudio();
+            if (state.selectedItemId === id) {
+                state.selectedItemId = null;
+                showHint('💡 已取消選取');
+            } else {
+                state.selectedItemId = id;
+                const item = ALL_ITEMS.find(i => i.id === id);
+                showHint(`👉 已選取「${item.name}」，請點擊「天氣炎熱」或「下雨」欄位放置！`);
+            }
+            renderAllPools();
+        }
+
+        function handleZoneClick(targetCategory) {
+            if (state.selectedItemId) {
+                processClassification(state.selectedItemId, targetCategory);
+                state.selectedItemId = null;
+            }
+        }
+
+        function processClassification(itemId, targetCategory) {
+            const item = ALL_ITEMS.find(i => i.id === itemId);
+            if (!item) return;
+
+            if (item.category === targetCategory) {
+                playSound('correct');
+                
+                const addedScore = 10;
+                state.score += addedScore;
+                
+                state.remainingItems = state.remainingItems.filter(i => i.id !== itemId);
+                if (targetCategory === 'hot') {
+                    state.hotItems.push(item);
+                } else {
+                    state.rainyItems.push(item);
+                }
+
+                const categoryText = targetCategory === 'hot' ? '天氣炎熱' : '下雨';
+                showHint(`✨ 太棒了！「${item.name}」適合在【${categoryText}】時使用！${item.hint}`);
+                triggerScoreEffect(addedScore);
+                updateScoreUI();
+                renderAllPools();
+
+                // 檢查是否全部分類完成
+                if (state.remainingItems.length === 0) {
+                    setTimeout(() => {
+                        playSound('win');
+                        showHint('🎉 恭喜你完成了所有物品配對！隨時點擊 🔊 重複聽普通話發音喔！');
+                    }, 400);
+                }
+
+            } else {
+                playSound('wrong');
+
+                const cardEl = document.getElementById(`item-${itemId}`);
+                if (cardEl) {
+                    cardEl.classList.add('animate-shake', 'border-red-500');
+                    setTimeout(() => {
+                        cardEl.classList.remove('animate-shake', 'border-red-500');
+                    }, 400);
+                }
+
+                const correctName = item.category === 'hot' ? '天氣炎熱' : '下雨';
+                showHint(`❌ 「${item.name}」其實是【${correctName}】時使用的物品喔！再試一次吧！`);
+            }
+        }
+
+        // 頁面載入後自動初始化遊戲
+        window.addEventListener('DOMContentLoaded', initGame);
+        window.onload = initGame;
+    </script>
+</body>
+</html>
